@@ -1,4 +1,9 @@
-The words are:    
-Length: 3
-Time taken by function: 33 milliseconds
+SIZE:6
+RANK0
+5
+The words are: 
+Length: 0
+Time taken by function: 156 milliseconds
+
+: 156 milliseconds
 
