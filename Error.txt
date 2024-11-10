@@ -1,0 +1,12 @@
+
+hello:236110 terminated with signal 11 at PC=7e3b924a53fe SP=7ffde1ae6ce0.  Backtrace:
+/lib/x86_64-linux-gnu/libc.so.6(free+0x1e)[0x7e3b924a53fe]
+./hello(+0x5d40)[0x5dbd9d911d40]
+./hello(+0x58a4)[0x5dbd9d9118a4]
+./hello(+0x5214)[0x5dbd9d911214]
+./hello(+0x453b)[0x5dbd9d91053b]
+./hello(+0x3b73)[0x5dbd9d90fb73]
+./hello(+0x3705)[0x5dbd9d90f705]
+/lib/x86_64-linux-gnu/libc.so.6(+0x29d90)[0x7e3b92429d90]
+/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x80)[0x7e3b92429e40]
+./hello(+0x2565)[0x5dbd9d90e565]

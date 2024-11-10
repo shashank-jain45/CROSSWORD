@@ -1,0 +1,4 @@
+The words are:    
+Length: 3
+Time taken by function: 33 milliseconds
+
