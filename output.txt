@@ -1,9 +1,5 @@
-SIZE:6
-RANK0
-5
-The words are: 
-Length: 0
-Time taken by function: 156 milliseconds
-
-: 156 milliseconds
+dbimiir pcnmg tkvjg 
+The words are: dbimiir pcnmg tkvjg 
+Length: 3
+Time taken by function: 19 milliseconds
 

@@ -1,16 +1,14 @@
-
 #include <bits/stdc++.h>
 #include <mpi.h>
 using namespace std;
 using namespace std::chrono;
+
 class Solution
 {
-public:
     struct TrieNode
     {
         TrieNode *children[26] = {};
         string *word;
-
         void addWord(string &word)
         {
             TrieNode *curr = this;
@@ -24,14 +22,14 @@ public:
             curr->word = &word;
         }
     };
+    vector<string> ans;
 
-    vector<string> ans_local;
-
+    // This function is now modified to include MPI-related parallel processing
     void find(int x, int y, TrieNode *curr, vector<vector<char>> &board)
     {
         if (curr->word != nullptr)
         {
-            ans_local.push_back(*(curr->word));
+            ans.push_back(*(curr->word));
             curr->word = nullptr;
         }
         int xm[4] = {0, 0, 1, -1};
@@ -51,142 +49,182 @@ public:
                 board[x][y] = orig;
             }
         }
+        return;
     }
 
-    vector<string> findWords(vector<vector<char>> &board, vector<string> &words)
+public:
+    vector<string> findWords(vector<vector<char>> &board, vector<string> &words, int rank, int size)
     {
         int row = board.size();
         int col = board[0].size();
         TrieNode *node = new TrieNode();
-
-        // Build Trie
         for (auto &it : words)
         {
             node->addWord(it);
         }
 
-        // Initialize MPI
-        int rank, size;
-        MPI_Init(nullptr, nullptr);
-        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-        MPI_Comm_size(MPI_COMM_WORLD, &size);
-        cout << "SIZE:" << size << endl;
-        cout << "RANK" << rank << endl;
-        // Determine work distribution
-        int rows_per_process = row / size;
-        int start_row = rank * rows_per_process;
-        int end_row = (rank == size - 1) ? row : start_row + rows_per_process;
+        int start_row = (rank * row) / size;
+        int end_row = ((rank + 1) * row) / size;
 
-        // Each process works on its own rows
         for (int i = start_row; i < end_row; i++)
         {
             for (int j = 0; j < col; j++)
             {
                 if (node->children[board[i][j] - 'a'])
-                {
                     find(i, j, node->children[board[i][j] - 'a'], board);
-                }
             }
         }
 
-        // Gather results at the root process
-        vector<string> ans_global;
         if (rank == 0)
         {
-            // Insert local results from rank 0
-            ans_global.insert(ans_global.end(), ans_local.begin(), ans_local.end());
+            vector<string> global_ans = ans;
 
-            // Receive data from other processes
             for (int i = 1; i < size; i++)
             {
-                int recv_size;
-                MPI_Recv(&recv_size, 1, MPI_INT, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                int local_size;
+                MPI_Recv(&local_size, 1, MPI_INT, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-                // Calculate the total number of bytes needed to receive all strings
-                vector<char> buffer;
-                for (int j = 0; j < recv_size; j++)
+                vector<string> temp(local_size);
+                for (int j = 0; j < local_size; j++)
                 {
-                    int str_len;
-                    MPI_Recv(&str_len, 1, MPI_INT, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                    // Now allocate a buffer for the string content
-                    vector<char> str_buffer(str_len);
-                    MPI_Recv(str_buffer.data(), str_len, MPI_CHAR, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                    ans_global.push_back(string(str_buffer.begin(), str_buffer.end()));
+                    int word_len;
+                    MPI_Recv(&word_len, 1, MPI_INT, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+                    temp[j].resize(word_len);
+                    MPI_Recv(&temp[j][0], word_len, MPI_CHAR, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
                 }
+                global_ans.insert(global_ans.end(), temp.begin(), temp.end());
             }
-        }
-        else
-        {
-            // Send the local results from other processes
-            int send_size = ans_local.size();
-            MPI_Send(&send_size, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
 
-            // Send each string length followed by its content
-            for (const string &str : ans_local)
+            for (const auto &word : global_ans)
             {
-                int str_len = str.size();
-                MPI_Send(&str_len, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
-                MPI_Send(str.data(), str_len, MPI_CHAR, 0, 0, MPI_COMM_WORLD);
+                cout << word << " ";
             }
-        }
-
-        // Finalize MPI
-        MPI_Finalize();
-
-        // Only root process returns the result
-        if (rank == 0)
-        {
-            cout << rank << endl;
-            return ans_global;
+            cout << endl;
+            return global_ans;
         }
         else
         {
-            cout << rank << endl;
-            return {}; // Other processes return an empty vector
+            int local_size = ans.size();
+
+            MPI_Send(&local_size, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+
+            for (int i = 0; i < local_size; i++)
+            {
+                int word_len = ans[i].size();
+
+                MPI_Send(&word_len, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+                MPI_Send(&ans[i][0], word_len, MPI_CHAR, 0, 0, MPI_COMM_WORLD);
+            }
         }
+
+        return ans;
     }
 };
+
 int main(int argc, char **argv)
 {
-
     freopen("input.txt", "r", stdin);
     freopen("output.txt", "w", stdout);
     freopen("Error.txt", "w", stderr);
-    int n, m;
-    cin >> n >> m;
-    vector<vector<char>> board(n, vector<char>(m));
-    for (int i = 0; i < n; i++)
-    {
-        for (int j = 0; j < m; j++)
-        {
-            cin >> board[i][j];
-        }
-    }
+    int rank, size;
+    MPI_Init(&argc, &argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+    int n, m, k;
+    vector<vector<char>> board;
     vector<string> words;
-    int k;
-    cin >> k;
-    for (int i = 0; i < k; i++)
+
+    if (rank == 0)
     {
-        string s;
-        cin >> s;
-        words.push_back(s);
+        cin >> n >> m;
+
+        board.resize(n, vector<char>(m));
+        for (int i = 0; i < n; ++i)
+            for (int j = 0; j < m; ++j)
+                cin >> board[i][j];
+
+        cin >> k;
+
+        words.resize(k);
+        for (int i = 0; i < k; ++i)
+            cin >> words[i];
     }
 
+    MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&m, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&k, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+    if (rank != 0)
+    {
+        board.resize(n, vector<char>(m));
+        words.resize(k);
+    }
+
+    for (int i = 0; i < n; ++i)
+        MPI_Bcast(&board[i][0], m, MPI_CHAR, 0, MPI_COMM_WORLD);
+
+    for (int i = 0; i < k; ++i)
+    {
+        int word_length = (rank == 0) ? words[i].size() : 0;
+
+        MPI_Bcast(&word_length, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+        if (rank != 0)
+        {
+            words[i].resize(word_length);
+        }
+
+        MPI_Bcast(&words[i][0], word_length, MPI_CHAR, 0, MPI_COMM_WORLD);
+    }
+    /// check output
+    // for (int i = 0; i < size; i++)
+    // {
+    //     if (i == rank)
+    //     {
+    //         cout << "Process " << rank << " received data:" << endl;
+    //         cout << "Board:" << endl;
+    //         for (int i = 0; i < n; ++i)
+    //         {
+    //             for (int j = 0; j < m; ++j)
+    //             {
+    //                 cout << board[i][j] << " ";
+    //             }
+    //             cout << endl;
+    //         }
+
+    //         cout << "Words:" << endl;
+    //         for (const string &word : words)
+    //         {
+    //             cout << word << endl;
+    //         }
+    //         cout << "-----------------------------------" << endl;
+    //     }
+
+    //     // Use a barrier to ensure each process waits for others
+    //     MPI_Barrier(MPI_COMM_WORLD);
+    // }
     Solution obj;
     auto start = high_resolution_clock::now();
-    vector<string> ans = obj.findWords(board, words);
+    vector<string> ans = obj.findWords(board, words, rank, size);
     auto stop = high_resolution_clock::now();
 
-    cout << "The words are: ";
-    for (auto it : ans)
+    if (rank == 0)
     {
-        cout << it << " ";
+        cout << "The words are: ";
+        for (auto it : ans)
+        {
+            cout << it << " ";
+        }
+        cout << endl;
+        cout << "Length: " << ans.size() << endl;
+
+        auto duration = duration_cast<milliseconds>(stop - start);
+        cout << "Time taken by function: " << duration.count() << " milliseconds" << endl;
+        cout << endl;
     }
-    cout << endl;
-    cout << "Length: " << ans.size() << endl;
 
-    auto duration = duration_cast<milliseconds>(stop - start);
-
-    cout << "Time taken by function: " << duration.count() << " milliseconds" << endl;
-    cout << endl;
+    MPI_Finalize();
+    return 0;
 }

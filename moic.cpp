@@ -1,23 +1,8 @@
 #include <mpi.h>
 #include <iostream>
 #include <vector>
-#include <bits/stdc++.h>
+#include <string>
 using namespace std;
-// Converts vector<string> to vector<char>.
-std::vector<char> string_to_char(const std::vector<std::string> &strings)
-{
-    std::vector<char> cstrings;
-    for (std::string s : strings)
-    {
-        for (size_t i = 0; i < strlen(s.c_str()); ++i)
-        {
-            cstrings.push_back(s.c_str()[i]);
-        }
-        cstrings.push_back('$');
-    }
-
-    return cstrings;
-}
 
 int main(int argc, char *argv[])
 {
@@ -30,88 +15,95 @@ int main(int argc, char *argv[])
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
     int n, m, k;
-    int len;
-    vector<char> board;
+    vector<vector<char>> board;
     vector<string> words;
-    std::vector<char> cstrings;
+
     if (rank == 0)
     {
-
         // Initialize `n`, `m`, and `k` and populate `board` and `words` in the root process
+        cout << "Enter dimensions of the board (n x m): ";
         cin >> n >> m;
-        cout << " (n x m): " << n << " " << m << endl;
 
         // Initialize the board with some data
-        board.resize(n * m);
-        // cout << "Enter the board elements:" << endl;
+        board.resize(n, vector<char>(m));
+        cout << "Enter the board elements:" << endl;
         for (int i = 0; i < n; ++i)
             for (int j = 0; j < m; ++j)
-                cin >> board[i * m + j];
+                cin >> board[i][j];
 
-        // cout << "Enter number of words (k): ";
+        cout << "Enter number of words (k): ";
         cin >> k;
 
         // Initialize words with some data
         words.resize(k);
-        // cout << "Enter each word:" << endl;
+        cout << "Enter each word:" << endl;
         for (int i = 0; i < k; ++i)
             cin >> words[i];
-
-        cstrings = string_to_char(words);
-        len = cstrings.size();
     }
 
     // Broadcast the dimensions n, m, and k
     MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Bcast(&m, 1, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Bcast(&k, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Bcast(&len, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-    vector<int> mat_data;
     // Resize board and words in non-root processes after receiving dimensions
     if (rank != 0)
     {
-        board.reserve(n * m);
-        words.reserve(k);
-        cstrings.reserve(len);
+        board.resize(n, vector<char>(m));
+        words.resize(k);
     }
 
     // Broadcast the entire board as a contiguous 1D array
-    MPI_Bcast(cstrings.data(), len, MPI_CHAR, 0, MPI_COMM_WORLD);
-    int j = 0; 
-    for (int i = 0; i < k; i++)
+
+    for (int i = 0; i < n; ++i)
+        MPI_Bcast(&board[i][0], m, MPI_CHAR, 0, MPI_COMM_WORLD);
+
+    // Broadcast each word as a contiguous string
+
+    for (int i = 0; i < k; ++i)
     {
-        while (1)
+        int word_length = (rank == 0) ? words[i].size() : 0;
+
+        // Broadcast the length of each word first
+        MPI_Bcast(&word_length, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+        // Resize each word in non-root processes to match the length
+        if (rank != 0)
         {
-            if (cstrings[j] == '$')
-            {
-                j++;
-                break;
-            }
-            words[i].push_back(cstrings[j]);
-            j++;
+            words[i].resize(word_length);
         }
+
+        // Broadcast the word itself
+        MPI_Bcast(&words[i][0], word_length, MPI_CHAR, 0, MPI_COMM_WORLD);
     }
-    //    MPI_Bcast(&board[0][0], n * m, MPI_CHAR, 0, MPI_COMM_WORLD);
 
     // Each process can now use `board` and `words` as they have received the same data
-    cout << "Process " << rank << " received data:" << endl;
-    // cout << "Board:" << endl;
-    // for (int i = 0; i < n; ++i)
-    // {
-    //     for (int j = 0; j < m; ++j)
-    //     {
-    //         cout << board[i][j] << " ";
-    //     }
-    //     cout << endl;
-    // }
-
-    cout << "Words:" << endl;
-    for (auto it : words)
+    for (int i = 0; i < size; i++)
     {
-        cout << it << endl;
-    }
+        if (i == rank)
+        {
+            cout << "Process " << rank << " received data:" << endl;
+            cout << "Board:" << endl;
+            for (int i = 0; i < n; ++i)
+            {
+                for (int j = 0; j < m; ++j)
+                {
+                    cout << board[i][j] << " ";
+                }
+                cout << endl;
+            }
 
+            cout << "Words:" << endl;
+            for (const string &word : words)
+            {
+                cout << word << endl;
+            }
+            cout << "-----------------------------------" << endl;
+        }
+
+        // Use a barrier to ensure each process waits for others
+        MPI_Barrier(MPI_COMM_WORLD);
+    }
     MPI_Finalize();
     return 0;
 }
