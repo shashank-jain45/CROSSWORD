@@ -47,7 +47,7 @@ def main():
     words = generate_random_words(k, max_word_len, board)
 
     # Save to input.txt
-    save_test_case('input.txt', n, m, board, k, words)
+    save_test_case('../src/input.txt', n, m, board, k, words)
 
     print("Test case generated and saved to input.txt")
 
